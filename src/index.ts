@@ -606,7 +606,8 @@ export default class PluginManager {
       installedPluginsI18ns: this.installedPluginsI18ns,
       installedPluginsManifests: this.installedPluginsManifests,
       pluginProviders: this.pluginProviders,
-      pluginsConfigurations: this.pluginsConfigurations
+      pluginsConfigurations: this.pluginsConfigurations,
+      importedPlugins: this.importedPlugins
     };
   }
 }
