@@ -1,3 +1,5 @@
 docs/
 node_modules/
 dist/
+.DS_Store
+aim-packages-plugin-manager-*.tgz
