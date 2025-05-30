@@ -1,10 +1,11 @@
 export interface Plugin {
   file: string; // 插件的入口文件，通常是打包完成之后的 index.js
+  page?: string; // 插件的页面文件，通常是打包完成之后的 index.html
   pluginId: string; // 插件在整个应用的唯一ID，命名为 “应用-plugin-类别-服务商” 如：memo-plugin-translate-ollama
   version: string; // 插件版本, 如：1.0.0
   version_name: string; // 插件版本名称，如：beta，alpha，release
   title: string; // 插件标题
-  type: "translate" | "summarize" | "download" | "tts" | "transcription"; // 插件类别
+  type: "translate" | "summarize" | "download" | "tts" | "transcription" | "app"; // 插件类别
   description: string; // 插件描述
   category: string; // 插件分类
   platforms: string[]; // 插件支持的平台，数组: [ "win32", "darwin" ]

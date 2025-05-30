@@ -323,6 +323,9 @@ export default class PluginManager {
         "homepage": data.source,
         "source": data.source
       };
+      if (fs.existsSync(path.resolve(manifest, "index.html"))) {
+        plugin.page = path.resolve(this.location, `${data.pluginId}@${data.version}/index.html`)
+      };
 
       await copyFolder(manifest, path.resolve(this.location, data.pluginId + "@" + data.version));
       await removeFolder(dist);
