@@ -1,4 +1,3 @@
-import axios from "axios";
 import { compareVersions } from "compare-versions";
 import fsa from "fs-extra";
 import type { HttpsProxyAgent } from "https-proxy-agent";
@@ -6,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SocksProxyAgent } from "socks-proxy-agent";
 import { NodeVM, VMScript } from "vm2";
+import https from "https";
+import http from "http";
 
 import { I18n, Manifest, MemoPlugins, Plugin, PluginReturnType } from "./types";
 import { calculateFileHash, copyFile, copyFolder, downloadFile, findFileInFolder, generateUUID, getFileNameWithoutExtension, getFilesWithExtension, getValueFromJSON, removeFile, removeFiles, removeFolder, unzipFile } from "./util";
@@ -266,36 +267,91 @@ export default class PluginManager {
   async getOnlinePlugins({ agent }: {
     agent?: HttpsProxyAgent<string> | SocksProxyAgent | undefined
   }): Promise<MemoPlugins> {
-    const response = await axios.get(this.requestUrl, {
-      headers: { "Content-Type": "application/json" },
-      httpsAgent: agent
-    });
-    const pluginsPath = path.resolve(this.location, "plugins.json");
+    return new Promise((resolve, reject) => {
+      const requestOptions = {
+        headers: { "Content-Type": "application/json" },
+        agent: agent
+      };
 
-    const res = response.data;
-    if (res && res.success && res.data) {
-      const versions: Record<string, string> = {};
+      const request = this.requestUrl.startsWith('https') 
+        ? https.get(this.requestUrl, requestOptions)
+        : http.get(this.requestUrl, requestOptions);
 
-      (res.data || []).forEach((plugin: Plugin) => {
-        versions[plugin.pluginId] = plugin.version;
+      let data = '';
+
+      request.on('response', (response) => {
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        response.on('end', () => {
+          try {
+            const res = JSON.parse(data);
+            const pluginsPath = path.resolve(this.location, "plugins.json");
+
+            if (res && res.success && res.data) {
+              const versions: Record<string, string> = {};
+
+              (res.data || []).forEach((plugin: Plugin) => {
+                versions[plugin.pluginId] = plugin.version;
+              });
+
+              const result = {
+                plugins: res.data || [],
+                versions
+              };
+
+              fs.writeFileSync(pluginsPath, JSON.stringify(result, null, 4));
+              resolve(result as MemoPlugins);
+            } else if (fs.existsSync(pluginsPath)) {
+              resolve(JSON.parse(fs.readFileSync(pluginsPath, { encoding: "utf-8" })));
+            } else {
+              resolve({
+                plugins: [],
+                versions: {}
+              });
+            }
+          } catch (error) {
+            reject(error);
+          }
+        });
       });
 
-      const data = {
-        plugins: res.data || [],
-        versions
-      };
+      request.on('error', (error) => {
+        const pluginsPath = path.resolve(this.location, "plugins.json");
+        if (fs.existsSync(pluginsPath)) {
+          try {
+            resolve(JSON.parse(fs.readFileSync(pluginsPath, { encoding: "utf-8" })));
+          } catch (error) {
+            reject(error);
+          }
+        } else {
+          console.log(error);
+          
+          resolve({
+            plugins: [],
+            versions: {}
+          });
+        }
+      });
 
-      fs.writeFileSync(pluginsPath, JSON.stringify(data, null, 4));
-
-      return data as MemoPlugins;
-    } else if (fs.existsSync(pluginsPath)) {
-      return JSON.parse(fs.readFileSync(pluginsPath, { encoding: "utf-8" }));
-    } else {
-      return {
-        plugins: [],
-        versions: {}
-      };
-    }
+      request.on('timeout', () => {
+        request.destroy();
+        const pluginsPath = path.resolve(this.location, "plugins.json");
+        if (fs.existsSync(pluginsPath)) {
+          try {
+            resolve(JSON.parse(fs.readFileSync(pluginsPath, { encoding: "utf-8" })));
+          } catch (error) {
+            reject(error);
+          }
+        } else {
+          resolve({
+            plugins: [],
+            versions: {}
+          });
+        }
+      });
+    });
   }
 
   async installPlugins(pluginsPacks: { path: string }[], setting?: any) {

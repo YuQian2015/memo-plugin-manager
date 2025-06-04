@@ -1,6 +1,6 @@
 {
   "name": "@aim-packages/plugin-manager",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
@@ -10,7 +10,6 @@
     "doc": "typedoc src/index.ts --skipErrorChecking"
   },
   "dependencies": {
-    "axios": "^1.6.8",
     "compare-versions": "^6.1.0",
     "fs-extra": "^11.2.0",
     "unzip-stream": "^0.3.1",

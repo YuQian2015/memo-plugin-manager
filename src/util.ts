@@ -1,4 +1,3 @@
-import axios from "axios";
 import * as crypto from "crypto";
 import { default as fsa } from "fs-extra";
 import { HttpsProxyAgent } from "https-proxy-agent";
@@ -7,6 +6,8 @@ import path from "path";
 import { SocksProxyAgent } from "socks-proxy-agent";
 // @ts-ignore
 import unzip from "unzip-stream";
+import * as http from "http";
+import * as https from "https";
 
 
 /**
@@ -294,67 +295,73 @@ export async function downloadFile({ url, savePath, agent, startCallback, progre
   errorCallback?: (error: any) => void
   agent?: HttpsProxyAgent<string> | SocksProxyAgent | undefined
 }): Promise<void> {
-  try {
-    const response = await axios({
-      url,
-      method: "GET",
-      responseType: "stream",
-      httpsAgent: agent,
-      timeout: 5000, // 设置超时时间为5秒
-    });
-
-    // const extension = path.extname(url);
+  return new Promise((resolve, reject) => {
     const tempFilePath = `${savePath}.downloading`;
-
     const writer = fs.createWriteStream(tempFilePath);
+    
+    const requestOptions = {
+      timeout: 5000,
+      agent: agent
+    };
 
-    response.data.pipe(writer);
+    const request = url.startsWith('https') 
+      ? https.get(url, requestOptions)
+      : http.get(url, requestOptions);
 
-    if (startCallback) {
-      startCallback();
-    }
+    request.on('response', (response) => {
+      const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+      let bytesDownloaded = 0;
 
-    let bytesDownloaded = 0;
-    let totalSize: number | null = null;
-
-    response.data.on("data", (chunk: Buffer) => {
-      bytesDownloaded += chunk.length;
-
-      if (progressCallback && totalSize) {
-        const progress = (bytesDownloaded / totalSize) * 100;
-        progressCallback(progress);
+      if (startCallback) {
+        startCallback();
       }
+
+      response.on('data', (chunk: Buffer) => {
+        bytesDownloaded += chunk.length;
+        if (progressCallback && totalSize) {
+          const progress = (bytesDownloaded / totalSize) * 100;
+          progressCallback(progress);
+        }
+      });
+
+      response.pipe(writer);
     });
 
-    response.data.on("response", (res: any) => {
-      totalSize = parseInt(res.headers["content-length"], 10);
+    request.on('error', (error) => {
+      writer.end();
+      console.log("网络错误：", error);
+      errorCallback?.(error);
+      reject(error);
     });
 
-    writer.on("finish", () => {
+    request.on('timeout', () => {
+      request.destroy();
+      const error = new Error('请求超时');
+      console.log("请求超时：", error);
+      errorCallback?.(error);
+      reject(error);
+    });
+
+    writer.on('finish', () => {
       fs.rename(tempFilePath, savePath, (err) => {
         if (err) {
-          throw err;
+          errorCallback?.(err);
+          reject(err);
         } else {
           if (completionCallback) {
             completionCallback(savePath);
           }
+          resolve();
         }
       });
     });
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
-      // 处理请求超时错误
-      // 执行相应的操作
-      console.log("请求超时：", error);
-      errorCallback?.(error);
 
-    } else {
-      // 处理其他网络错误
-      // 执行相应的操作
-      console.log("网络错误：", error);
+    writer.on('error', (error) => {
+      console.log("写入错误：", error);
       errorCallback?.(error);
-    }
-  }
+      reject(error);
+    });
+  });
 }
 
 export function calculateFileHash(filePath: string) {
